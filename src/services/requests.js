@@ -79,10 +79,22 @@ export function createApplicationRequestServices({
     boundaryCapability = request(`${urls.boundaries}/status`, {
       signal: AbortSignal.timeout(boundaryProbe.timeoutMs),
     }).then(
-      (response) =>
-        response.ok && typeof response.data?.configured === 'boolean'
-          ? response.data.configured
-          : null, // an older server: fall back to asking per query
+      (response) => {
+        if (response.ok && typeof response.data?.configured === 'boolean')
+          return response.data.configured;
+        // Static hosts (for example a Cloudflare Pages dist-only deployment)
+        // commonly answer unknown /api routes with HTML or a plain 404. Treat
+        // that as an unavailable server capability instead of falling through
+        // to POST /api/overpass and showing an endless transient retry banner.
+        const contentType = response.headers?.get?.('content-type') || '';
+        if (
+          response.status === 404 ||
+          response.status === 405 ||
+          /text\/html/i.test(contentType)
+        )
+          return false;
+        return null; // an older API server: fall back to asking per query
+      },
       (error) => {
         boundaryCapability = null;
         if (lifetime?.aborted) throw error;
