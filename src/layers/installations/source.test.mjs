@@ -262,3 +262,26 @@ test('installation API transports never receive vector-tile URLs', async (t) => 
   }
   assert.ok(calls.length >= 4);
 });
+
+test('a static HTML installation route falls back to browser-safe tiles', async () => {
+  const tileFetches = [];
+  const source = createInstallationSource({
+    fetchImpl: async () =>
+      new Response('<!doctype html><title>Not found</title>', {
+        status: 404,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    loadNames: async () => [],
+    mapTiles: {
+      clear() {},
+      async fetchBounds(view, { zoom }) {
+        tileFetches.push({ view, zoom });
+        return { tiles: [], partial: false };
+      },
+    },
+  });
+  const payload = await source.getMappedSites(box);
+  assert.equal(payload.status, 'ready');
+  assert.equal(payload.tileSource, true);
+  assert.equal(tileFetches.length, 1);
+});
