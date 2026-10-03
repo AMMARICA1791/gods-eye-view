@@ -215,7 +215,38 @@ export function createInstallationSource({
       const response = await fetchImpl(`/api/military-installations?${query}`, {
         signal,
       });
-      const body = await response.json();
+      signal?.throwIfAborted();
+
+      // Static deployments (for example Cloudflare Pages) have no application
+      // API behind /api/military-installations. They commonly answer this route
+      // with a 404/405 or HTML. Treat that as a missing server capability and
+      // immediately use the browser-safe tile fallback instead of scheduling an
+      // endless Overpass retry loop.
+      const contentType = response.headers?.get?.('content-type') || '';
+      if (
+        response.status === 404 ||
+        response.status === 405 ||
+        /text\/html/i.test(contentType)
+      ) {
+        try {
+          await response.body?.cancel();
+        } catch {
+          /* already closed */
+        }
+        overpassUnavailable = true;
+        return getTileSites(box, signal, thinned);
+      }
+
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        signal?.throwIfAborted();
+        // A non-JSON response from this same-origin API route is another strong
+        // signal that this is a static host rather than the GEV API server.
+        overpassUnavailable = true;
+        return getTileSites(box, signal, thinned);
+      }
       signal?.throwIfAborted();
       if (isUnavailableCapability(body)) {
         overpassUnavailable = true;
