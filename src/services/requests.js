@@ -98,12 +98,11 @@ export function createApplicationRequestServices({
       (error) => {
         boundaryCapability = null;
         if (lifetime?.aborted) throw error;
-        // A dist-only/static deployment has no API server to answer the
-        // capability probe. Network failures and probe timeouts therefore mean
-        // the boundary service is unavailable, not that we should fall through
-        // and POST to /api/overpass (which creates a misleading retry banner).
+        // Preserve upstream compatibility for genuine transport failures and
+        // timeouts: an older/local API may still answer the real query. Static
+        // hosts are detected above from their concrete 404/405/HTML response.
         boundaryProbeRetryAt = Date.now() + boundaryProbe.retryMs;
-        return false;
+        return null;
       },
     );
     return boundaryCapability;
