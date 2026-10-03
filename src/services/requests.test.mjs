@@ -94,3 +94,17 @@ test('a failed probe is retried after its backoff, not on every query', async ()
     'GET /api/overpass/status',
   ]);
 });
+
+test('a static-host boundary probe disables Overpass without a POST fallback', async () => {
+  const { seen, fetchImpl } = probeTransport(async () =>
+    new Response('<!doctype html><title>Not found</title>', {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    }),
+  );
+  const services = createApplicationRequestServices({ fetchImpl });
+  const result = await services.boundaries.query('fixture');
+  assert.equal(result.code, 'OVERPASS_NOT_CONFIGURED');
+  assert.equal(result.retryable, false);
+  assert.deepEqual(seen, ['GET /api/overpass/status']);
+});
